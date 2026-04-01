@@ -1,0 +1,713 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pretext GPT Local</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    color-scheme: light;
+    --page: #efe7db;
+    --paper: #fbf7ef;
+    --panel: #fffdf8;
+    --panel-strong: #f8f2e9;
+    --ink: #211910;
+    --muted: #6b6258;
+    --rule: rgb(120 94 62 / 0.16);
+    --accent: #9d5c2d;
+    --accent-strong: #7d431c;
+    --accent-soft: #f5e1cc;
+    --assistant: #f7efe3;
+    --assistant-border: #e4d2bf;
+    --user: #1f7a5b;
+    --user-ink: #f8fbfa;
+    --error: #7f1f1f;
+    --error-soft: #fce8e8;
+    --shadow-xl: 0 28px 70px rgb(42 30 16 / 0.12);
+    --shadow-lg: 0 18px 40px rgb(42 30 16 / 0.08);
+    --composer-height: 88px;
+    --composer-padding-y: 16px;
+    --message-line-height: 24px;
+    --message-padding-y: 14px;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top left, rgb(255 246 230 / 0.95), transparent 38%),
+      radial-gradient(circle at top right, rgb(244 232 214 / 0.65), transparent 34%),
+      linear-gradient(180deg, #f7f1e7 0%, var(--page) 50%, #ebe1d3 100%);
+    color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  .app-shell {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr) 360px;
+    min-height: 100vh;
+    gap: 18px;
+    padding: 18px;
+  }
+  .rail,
+  .workspace,
+  .settings {
+    min-height: calc(100vh - 36px);
+    border: 1px solid var(--rule);
+    border-radius: 28px;
+    background: color-mix(in srgb, var(--panel) 92%, white 8%);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(14px);
+  }
+  .rail {
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    gap: 18px;
+  }
+  .brand {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .brand__eyebrow {
+    margin: 0;
+    font: 12px/1.2 "SF Mono", ui-monospace, monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .brand h1 {
+    margin: 0;
+    font: 700 28px/1.02 Georgia, "Times New Roman", serif;
+  }
+  .brand p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .button {
+    appearance: none;
+    border: 0;
+    border-radius: 18px;
+    padding: 12px 16px;
+    font: 600 14px/1.1 "Helvetica Neue", Helvetica, Arial, sans-serif;
+    cursor: pointer;
+    transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  }
+  .button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 20px rgb(48 30 12 / 0.12);
+  }
+  .button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    transform: none;
+    box-shadow: none;
+  }
+  .button--primary {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+    color: white;
+  }
+  .button--secondary {
+    background: var(--panel-strong);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+  }
+  .conversation-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    overflow: auto;
+    padding-right: 4px;
+  }
+  .conversation-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    padding: 14px 15px;
+    border: 1px solid transparent;
+    border-radius: 18px;
+    background: rgb(255 255 255 / 0.42);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  }
+  .conversation-item:hover {
+    transform: translateY(-1px);
+    background: #fffaf3;
+    border-color: color-mix(in srgb, var(--accent) 20%, var(--rule) 80%);
+  }
+  .conversation-item--active {
+    background: linear-gradient(180deg, #fff7ec 0%, #f8ecd9 100%);
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--rule) 72%);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.42);
+  }
+  .conversation-item__title {
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .conversation-item__meta {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .rail__footer {
+    margin-top: auto;
+    padding: 16px;
+    border: 1px solid var(--rule);
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.55) 0%, rgb(250 245 238 / 0.96) 100%);
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .workspace {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+    position: relative;
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.66) 0%, rgb(252 248 241 / 0.98) 100%),
+      radial-gradient(circle at top, rgb(255 251 245 / 0.85), transparent 58%);
+  }
+  .workspace__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 24px 28px 18px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .header-meta__title {
+    font: 700 28px/1.02 Georgia, "Times New Roman", serif;
+  }
+  .header-meta__subtitle {
+    margin-top: 8px;
+    color: var(--muted);
+    line-height: 1.45;
+    max-width: 56ch;
+  }
+  .badges {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.72);
+    font: 12px/1.2 "SF Mono", ui-monospace, monospace;
+    color: var(--muted);
+  }
+  .messages {
+    position: relative;
+    overflow: auto;
+    padding: 26px 28px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .empty-state {
+    display: grid;
+    gap: 18px;
+    align-self: center;
+    width: min(760px, 100%);
+    padding: 16px 0 26px;
+  }
+  .hero {
+    padding: 28px;
+    border-radius: 28px;
+    border: 1px solid var(--rule);
+    background:
+      linear-gradient(145deg, rgb(255 251 245 / 0.96) 0%, rgb(250 243 233 / 0.98) 100%),
+      radial-gradient(circle at top right, rgb(255 238 214 / 0.85), transparent 34%);
+    box-shadow: var(--shadow-xl);
+  }
+  .hero h2 {
+    margin: 0;
+    font: 700 40px/0.98 Georgia, "Times New Roman", serif;
+  }
+  .hero p {
+    margin: 14px 0 0;
+    max-width: 56ch;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .tip-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .tip-card {
+    padding: 16px;
+    border: 1px solid var(--rule);
+    border-radius: 22px;
+    background: rgb(255 255 255 / 0.7);
+    cursor: pointer;
+    text-align: left;
+    transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+  }
+  .tip-card:hover {
+    transform: translateY(-1px);
+    background: #fff9f1;
+    border-color: color-mix(in srgb, var(--accent) 20%, var(--rule) 80%);
+  }
+  .tip-card strong {
+    display: block;
+    font-size: 15px;
+  }
+  .tip-card span {
+    display: block;
+    margin-top: 8px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .message-row {
+    display: flex;
+    width: 100%;
+  }
+  .message-row--assistant {
+    justify-content: flex-start;
+  }
+  .message-row--user {
+    justify-content: flex-end;
+  }
+  .message-bubble {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 24px;
+    box-shadow: 0 14px 30px rgb(39 28 14 / 0.08);
+    line-height: calc(var(--message-line-height) * 1px);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  .message-bubble--assistant {
+    background: linear-gradient(180deg, var(--assistant) 0%, #fdf9f2 100%);
+    border: 1px solid var(--assistant-border);
+  }
+  .message-bubble--user {
+    background: linear-gradient(160deg, #2f9672 0%, var(--user) 100%);
+    color: var(--user-ink);
+  }
+  .message-bubble--error {
+    background: linear-gradient(180deg, var(--error-soft) 0%, #fff6f6 100%);
+    border: 1px solid rgb(168 61 61 / 0.28);
+    color: var(--error);
+  }
+  .message-bubble__meta {
+    font: 12px/1.2 "SF Mono", ui-monospace, monospace;
+    opacity: 0.72;
+  }
+  .message-bubble__body {
+    font: 500 15px/24px "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  .typing {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+  }
+  .typing__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: currentColor;
+    animation: pulse 1.15s infinite ease-in-out;
+  }
+  .typing__dot:nth-child(2) { animation-delay: 120ms; }
+  .typing__dot:nth-child(3) { animation-delay: 240ms; }
+  .composer {
+    padding: 18px 28px 24px;
+    border-top: 1px solid var(--rule);
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.5) 0%, rgb(251 247 239 / 0.98) 100%);
+  }
+  .composer__frame {
+    display: grid;
+    gap: 12px;
+    padding: 18px;
+    border: 1px solid var(--rule);
+    border-radius: 26px;
+    background: rgb(255 255 255 / 0.92);
+    box-shadow: 0 16px 36px rgb(38 26 12 / 0.08);
+  }
+  .composer textarea {
+    width: 100%;
+    min-height: 64px;
+    max-height: 360px;
+    resize: none;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    outline: none;
+    font: 500 16px/24px "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  .composer textarea::placeholder {
+    color: #9a9085;
+  }
+  .composer__meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .composer__hint {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .composer__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .settings {
+    display: flex;
+    flex-direction: column;
+    padding: 22px;
+    gap: 18px;
+  }
+  .settings__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .settings__top h2 {
+    margin: 0;
+    font: 700 24px/1.04 Georgia, "Times New Roman", serif;
+  }
+  .settings__top p {
+    margin: 10px 0 0;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .settings__form {
+    display: grid;
+    gap: 14px;
+  }
+  .field {
+    display: grid;
+    gap: 8px;
+  }
+  .field label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .field input,
+  .field textarea {
+    width: 100%;
+    border: 1px solid var(--rule);
+    border-radius: 18px;
+    background: #fffdfa;
+    color: var(--ink);
+    padding: 12px 14px;
+    outline: none;
+    font: 500 14px/1.45 "Helvetica Neue", Helvetica, Arial, sans-serif;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+  .field textarea {
+    resize: vertical;
+    min-height: 112px;
+  }
+  .field input:focus,
+  .field textarea:focus {
+    border-color: color-mix(in srgb, var(--accent) 48%, var(--rule) 52%);
+    box-shadow: 0 0 0 3px rgb(157 92 45 / 0.12);
+  }
+  .field small {
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .setting-card {
+    padding: 16px;
+    border: 1px solid var(--rule);
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.62) 0%, rgb(249 243 235 / 0.95) 100%);
+  }
+  .setting-card h3 {
+    margin: 0;
+    font-size: 15px;
+  }
+  .setting-card p {
+    margin: 8px 0 0;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .mobile-settings-button {
+    display: none;
+  }
+  .settings-backdrop {
+    display: none;
+  }
+  @keyframes pulse {
+    0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+    40% { opacity: 1; transform: translateY(-3px); }
+  }
+  @media (max-width: 1280px) {
+    .app-shell {
+      grid-template-columns: 252px minmax(0, 1fr);
+    }
+    .settings {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      bottom: 18px;
+      width: min(380px, calc(100vw - 36px));
+      z-index: 30;
+      transform: translateX(calc(100% + 24px));
+      transition: transform 180ms ease;
+    }
+    .settings[data-open="true"] {
+      transform: translateX(0);
+    }
+    .settings-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      background: rgb(26 18 9 / 0.28);
+      backdrop-filter: blur(8px);
+    }
+    .settings-backdrop:not([hidden]) {
+      display: block;
+    }
+    .mobile-settings-button {
+      display: inline-flex;
+    }
+  }
+  @media (max-width: 960px) {
+    .app-shell {
+      grid-template-columns: 1fr;
+      padding: 12px;
+    }
+    .rail,
+    .workspace {
+      min-height: auto;
+    }
+    .rail {
+      gap: 14px;
+    }
+    .conversation-list {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(220px, 1fr);
+      overflow: auto hidden;
+      padding-bottom: 6px;
+    }
+    .tip-grid {
+      grid-template-columns: 1fr;
+    }
+    .workspace__top,
+    .messages,
+    .composer {
+      padding-left: 18px;
+      padding-right: 18px;
+    }
+  }
+  @media (max-width: 640px) {
+    .brand h1,
+    .hero h2,
+    .header-meta__title {
+      font-size: 24px;
+    }
+    .workspace__top {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .badges {
+      justify-content: flex-start;
+    }
+    .composer__meta {
+      align-items: stretch;
+    }
+    .composer__actions {
+      justify-content: stretch;
+    }
+    .composer__actions .button {
+      flex: 1;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="settings-backdrop" id="settings-backdrop" hidden=""></div>
+  <main class="app-shell" id="app-shell" style="--composer-height: 56px; --composer-padding-y: 16px; --message-line-height: 24px; --message-padding-y: 14px;">
+    <aside class="rail">
+      <section class="brand">
+        <p class="brand__eyebrow">Pretext + GPT</p>
+        <h1>Local Conversation Studio</h1>
+        <p>浏览器式聊天界面，气泡宽度和输入框高度由 Pretext 精算，本地即可接入你的 GPT API。</p>
+      </section>
+
+      <button class="button button--primary" type="button" id="new-chat-button">新建对话</button>
+
+      <div class="conversation-list" id="conversation-list" aria-label="会话列表"><button class="conversation-item conversation-item--active" data-conversation-id="chat-pfaigya-mnfsrgl5" type="button"><span class="conversation-item__title">New chat</span><span class="conversation-item__meta">0 条消息</span></button></div>
+
+      <section class="rail__footer">
+        这套界面默认把会话记录和连接设置保存在当前浏览器。
+        想换模型或服务地址，直接在右侧配置即可。
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <header class="workspace__top">
+        <div id="header-meta"><div class="header-meta__title">New chat</div><div class="header-meta__subtitle">浏览器式对话界面，当前使用兼容排版模式。</div></div>
+        <div class="badges">
+          <span class="badge" id="status-badge">等待 API 配置</span>
+          <span class="badge" id="model-badge">请输入模型</span>
+          <span class="badge" id="save-hint">本地保存</span>
+          <button class="button button--secondary mobile-settings-button" type="button" id="mobile-settings-button" aria-expanded="false">连接设置</button>
+          <button class="button button--secondary" type="button" id="settings-toggle" aria-expanded="false">设置面板</button>
+        </div>
+      </header>
+
+      <div class="messages" id="message-list"><div class="empty-state" id="empty-state">
+          <section class="hero">
+            <h2>像浏览器里的 GPT，一样自然地聊天。</h2>
+            <p>
+              这里不是简单套个聊天壳子。消息气泡会基于 Pretext 自动缩到更紧凑的宽度，
+              输入框也不是靠 <code>scrollHeight</code> 粗略拉伸，而是用文本布局结果预测高度。
+            </p>
+          </section>
+
+          <div class="tip-grid" id="tips-list">
+            <button class="tip-card" type="button" data-prompt="给我设计一个简洁但高级的首页信息架构，并输出清晰的组件拆分。">
+              <strong>产品方案</strong>
+              <span>让它像资深产品设计师，先给信息架构，再给组件层级。</span>
+            </button>
+
+            <button class="tip-card" type="button" data-prompt="帮我把这段接口文档改成面向前端同学的实现说明，附一个 fetch 示例。">
+              <strong>工程协作</strong>
+              <span>把抽象需求翻译成能直接开发的接口说明和示例代码。</span>
+            </button>
+
+            <button class="tip-card" type="button" data-prompt="请作为代码审查助手，帮我找出下面改动最可能引入的回归风险，并按严重程度排序。">
+              <strong>代码评审</strong>
+              <span>适合日常 review，把注意力放在风险和回归点上。</span>
+            </button>
+          </div>
+        </div></div>
+
+      <form class="composer" id="composer-form">
+        <div class="composer__frame">
+          <textarea id="composer" placeholder="输入你的问题，按 Enter 发送，Shift + Enter 换行。" style="height: 56px;"></textarea>
+          <div class="composer__meta">
+            <div class="composer__hint">
+              输入框高度由 Pretext 的 <code>pre-wrap</code> 布局结果驱动，不依赖实时 DOM 测量。
+            </div>
+            <div class="composer__actions">
+              <button class="button button--secondary" type="button" id="stop-button" hidden="">停止生成</button>
+              <button class="button button--primary" type="submit" id="send-button" disabled="">发送</button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <aside class="settings" id="settings-panel" data-open="false">
+      <div class="settings__top">
+        <div>
+          <h2>连接设置</h2>
+          <p>支持 OpenAI 兼容接口。你可以直接填官方 API，也可以换成自己的兼容网关。</p>
+        </div>
+      </div>
+
+      <div class="settings__form">
+        <div class="field">
+          <label for="config-base-url">Base URL</label>
+          <input id="config-base-url" type="text" placeholder="https://api.openai.com/v1">
+          <small>填到 <code>/v1</code> 即可；如果你填了完整的 <code>/chat/completions</code> 也能识别。</small>
+        </div>
+
+        <div class="field">
+          <label for="config-model">Model</label>
+          <input id="config-model" type="text" placeholder="例如：你的模型 ID">
+          <small>模型名由你的服务端决定，官方和兼容服务都可以在这里切换。</small>
+        </div>
+
+        <div class="field">
+          <label for="config-api-key">API Key</label>
+          <input id="config-api-key" type="password" placeholder="sk-...">
+          <small>如果你在启动服务时设置了环境变量，这里可以留空，由本地代理兜底。</small>
+        </div>
+
+        <div class="field">
+          <label for="config-temperature">Temperature</label>
+          <input id="config-temperature" type="number" min="0" max="2" step="0.1" placeholder="0.7">
+          <small>默认 0.7，越低越稳，越高越发散。</small>
+        </div>
+
+        <div class="field">
+          <label for="config-system-prompt">System Prompt</label>
+          <textarea id="config-system-prompt" placeholder="为你的 GPT 设定默认角色"></textarea>
+          <small>会自动附加到每次对话顶部，适合固定语气、输出格式或专业身份。</small>
+        </div>
+      </div>
+
+      <section class="setting-card">
+        <h3>Pretext 升级点</h3>
+        <p>消息气泡会在不改变换行数量的前提下，收缩到更紧凑的宽度，减少尾行浪费。</p>
+        <p>输入区按文本布局直接预测高度，避免传统聊天框频繁读写 DOM 的抖动感。</p>
+      </section>
+
+      <section class="setting-card">
+        <h3>启动方式</h3>
+        <p>推荐使用 <code>bun run chat:start</code>，它会启动本地页面并代理你的 GPT 请求。</p>
+      </section>
+    </aside>
+  </main>
+
+  <script>
+    window.__chatBooted = false;
+    window.__chatBootError = '';
+    function __showBootStatus(statusText, hintText, modelText) {
+      var saveHint = document.getElementById('save-hint');
+      if (saveHint instanceof HTMLSpanElement) saveHint.textContent = hintText;
+      var statusBadge = document.getElementById('status-badge');
+      if (statusBadge instanceof HTMLSpanElement) statusBadge.textContent = statusText;
+      var modelBadge = document.getElementById('model-badge');
+      if (modelBadge instanceof HTMLSpanElement && typeof modelText === 'string') modelBadge.textContent = modelText;
+    }
+    window.addEventListener('error', function (event) {
+      var target = event.target;
+      if (target instanceof HTMLScriptElement) {
+        window.__chatBootError = '脚本资源加载失败：' + (target.src || 'chat.js');
+      } else {
+        window.__chatBootError = '脚本错误：' + (event.message || '未知错误') + ' @' + (event.filename || 'inline') + ':' + event.lineno;
+      }
+      __showBootStatus('脚本未启动', window.__chatBootError, '请把这句报错发给我');
+    }, true);
+    window.addEventListener('submit', function (event) {
+      var target = event.target;
+      if (!(target instanceof HTMLFormElement)) return;
+      if (target.id !== 'composer-form') return;
+      if (window.__chatBooted === true) return;
+      event.preventDefault();
+      __showBootStatus('脚本未启动', window.__chatBootError || '脚本未成功启动，请按 Ctrl + F5 刷新', '请把顶部报错发给我');
+    }, true);
+    window.setTimeout(function () {
+      if (window.__chatBooted === true) return;
+      __showBootStatus('脚本未启动', window.__chatBootError || '脚本未成功启动，请按 Ctrl + F5 刷新', '请把顶部报错发给我');
+    }, 1500);
+  </script>
+  <script src="./chat.js?v=20260401-1625"></script>
+
+
+
+
+
+
+
+
+</body></html>
